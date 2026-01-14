@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     transaction_type TEXT,
     description TEXT,
     merchant TEXT,
+    country TEXT,
+    city TEXT,
     category TEXT,
     subcategory TEXT,
     rule_id INTEGER,

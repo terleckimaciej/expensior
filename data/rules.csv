@@ -22,9 +22,9 @@ id,pattern,match_type,source_column,merchant,category,subcategory,conditions,pri
 21,CYWILNO-PRAWNA PZU,contains,description,PZU S.A.,income,salary,,10
 22,FILIA-DOBRA,contains,description,Lubaszka,dining out,bakery,,10
 23,GORACO POLECAM,contains,description,Goraco Polecam,dining out,bakery,,10
-24,CZYNSZ,contains,description,,housing,rent,"{""max_amount"": 0}",10
+24,CZYNSZ,contains,description,,housing,rent,"{""max_amount"": 0}",9
 25,\bBAR( |$),regex,description,,dining out,restaurants,,9
-26,DOMANIEWSKA,contains,description,,housing,rent,"{""max_amount"": 0}",10
+26,DOMANIEWSKA,contains,description,,housing,rent,"{""max_amount"": 0}",9
 27,SUBWAY,contains,description,Subway,dining out,fast_food,,10
 28,OSZCZ,contains,description,,savings,,,10
 29,TOP MARKET,contains,description,Top Market,groceries,convinience_store,,10
@@ -61,11 +61,13 @@ id,pattern,match_type,source_column,merchant,category,subcategory,conditions,pri
 60,AIRBNB,contains,description,,,,,10
 61,ALDI,contains,description,,groceries,convinience_store,,10
 62,SYSTEMY POB. OPLAT,contains,description,ZTM Warszawa,transport,tickets,,10
-63,OSZCZ CO MIES,contains,description,,savings,,,10
+63,OSZCZ CO MIES,contains,description,,savings,,,9
 64,UBER,contains,description,Uber,transport,uber/bolt,,
 65,KEBAB,contains,description,Kebab,dining out ,fastfood,,9
 66,ALLEGRO,contains,description,Allegro,shopping_and_services,online_shopping,,
-67,INTECITY,contains,description,PKP Intercity,transport,tickets,,10
+67,INTERCITY,contains,description,PKP Intercity,transport,tickets,,10
 68,atm_withdrawal,contains,transaction_type,ATM,ATM_withdrawal,,,
 69,BATEX,contains,description,Venting Machine,dining_out,vending machines,,10
 70,LEROY MERLIN,contains,description,Leroy Merlin,shopping_and_services,home_goods,,10
+71,(DOMANIEWSKA|CZYNSZ),regex,description,,housing ,rent_reimbursment,"{""min_amount"": 0}",10
+72,auto_savings,contains,description,,savings,auto_savings,,10
