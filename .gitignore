@@ -48,6 +48,10 @@ coverage.xml
 *.cover
 *.py.cover
 .hypothesis/
+
+# Database
+*.db
+data/expensior.db
 .pytest_cache/
 cover/
 
