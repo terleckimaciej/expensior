@@ -4,8 +4,7 @@ PRAGMA foreign_keys = ON;
 -- 1) Import batches (import audit)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS import_batches (
-  import_batch_id   TEXT PRIMARY KEY,                -- e.g. file-hash+timestamp
-  source_name       TEXT NOT NULL,                   
+  import_batch_id   TEXT PRIMARY KEY,                -- e.g. file-hash+timestamp                  
   source_file_name  TEXT,                            
   imported_at       TEXT NOT NULL DEFAULT (datetime('now')),
   row_count         INTEGER,                         
