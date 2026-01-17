@@ -1,0 +1,75 @@
+do dodania:
+
+-mechanizm labelowania i obslugiwania zwrotow + np obsluzenie czynszu z przelewaniem od wspolokatorow
+
+
+struktura kategorii - szkic (category/subcategory/merchant):
+
+groceries
+	discount_store
+		biedronka
+		lidl
+	convinience_store
+		zabka
+		carefourr
+	bakery
+		lubaszka
+		putka
+		
+dining_out
+	restaurants
+		dziki bar mleczny
+		chinczyk z senatorskiej
+		asian dragon
+	fast_food
+		popeyes
+		mcdonald
+		kfc
+		kebab
+		subway
+	delivery
+	
+entertainment_and_subs
+	sport
+		pilkanahali.pl
+		multisport
+		basen 
+	subscriptions
+		OpenAI
+
+health
+	pharmacy
+		Apteka
+	doctors
+		klinika leczenia bolu
+		psychiatrists
+	vision
+		kodano
+transport
+	tickets
+		MPSA
+		intercity
+	uber/bolt
+		uber
+		bolt
+	scooters/bikes	
+		lime
+		veturilo
+shopping_and_services
+	clothing
+		vinted
+	electronics
+	home_goods
+	beauty
+		barber
+	online_shopping
+	books
+	services
+	music
+
+
+
+MODULY STRONY:
+
+-miejsce do wrzucenia csv
+-tabela transakcji wraz z dopasowaniami, mozliwosc dopisania
