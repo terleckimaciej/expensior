@@ -1,3 +1,24 @@
+-- SQLBook: Code
+
+-- ============================================================
+-- 0) Categories (Hierarchy)
+--    Used for dropdowns and validation.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS categories (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  name             TEXT NOT NULL,
+  parent_id        INTEGER,
+
+  FOREIGN KEY (parent_id) REFERENCES categories(id)
+    ON DELETE CASCADE,
+
+  UNIQUE(name, parent_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_categories_parent
+  ON categories(parent_id);
+
+-- SQLBook: Code
 PRAGMA foreign_keys = ON;
 
 -- ============================================================

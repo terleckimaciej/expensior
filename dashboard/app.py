@@ -64,16 +64,71 @@ start_date, end_date = st.sidebar.date_input(
 )
 
 # Category Filter
-categories = sorted([str(x) for x in df['category'].unique() if x])
-selected_categories = st.sidebar.multiselect("Categories", categories, default=categories)
+st.sidebar.subheader("Filter by Category")
+
+# 1. Load Categories Tree
+cat_tree = []
+try:
+    cat_resp = requests.get(f"{API_URL}/categories")
+    if cat_resp.status_code == 200:
+        cat_tree = cat_resp.json()
+except:
+    pass
+
+# Map category names to their dict for easy lookup
+cat_map = {c['name']: c for c in cat_tree}
+all_main_cats = sorted(cat_map.keys())
+
+# 2. Main Category Selection
+selected_main = st.sidebar.multiselect("Main Category", all_main_cats, default=all_main_cats)
+
+# 3. Subcategory Selection (Dynamic)
+available_subs = []
+for m in selected_main:
+    if m in cat_map:
+        subs = [s['name'] for s in cat_map[m].get('subcategories', [])]
+        available_subs.extend(subs)
+
+# If no main category selected, show no subcategories? Or all? 
+# Usually if parent not selected, children are irrelevant.
+# But here we want to allow selecting specific subcategories if they belong to selected parents.
+selected_subs = st.sidebar.multiselect("Subcategory", sorted(list(set(available_subs))), default=available_subs)
 
 # Apply Filters
+# We need to filter by 'category' (main) OR 'subcategory' columns in DF.
+# Note: In DF, 'category' corresponds to our Main Category.
+# 'subcategory' corresponds to our Subcategory.
+
 mask = (
     (df['date'].dt.date >= start_date) & 
-    (df['date'].dt.date <= end_date) &
-    (df['category'].isin(selected_categories) | df['category'].isna()) 
-    # Note: Handle None categories logic if needed, currently sidebar multiselect might filter none out
+    (df['date'].dt.date <= end_date)
 )
+
+# Logic:
+# If user selects specific main categories, we include rows where category is in that list.
+# REFINEMENT: If user selects specific subcategories, we must also respect that.
+# A transaction matches if:
+#   Main Category is in selected_main 
+#   AND (Subcategory is in selected_subs OR Subcategory is Empty/NaN)
+
+# However, the simple approach often used is:
+# Filter by Main Category first. Then if Subcategory filter is used, refine further.
+# But 'selected_subs' defaults to ALL available subs for selected parents. So it works naturally.
+
+if selected_main:
+    mask &= df['category'].isin(selected_main)
+
+if selected_subs:
+    # We only filter by subcategory if it's not None
+    # Transactions with NO subcategory should be kept if their Parent is selected?
+    # Let's say: if a user unchecks a subcategory, they want to hide it.
+    # What about transactions with NULL subcategory? Usually we keep them if parent is selected.
+    
+    # Complex logic: 
+    # Keep if (subcategory IN selected_subs) OR (subcategory is NULL and Keep Nulls?)
+    # For simplicity:
+    mask &= (df['subcategory'].isin(selected_subs) | df['subcategory'].isna())
+
 df_filtered = df.loc[mask]
 
 # --- KPI Metrics ---

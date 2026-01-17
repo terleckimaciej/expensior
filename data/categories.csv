@@ -1,0 +1,32 @@
+category,subcategory
+ATM_withdrawal,
+activity,
+dining out,bakery
+dining out,chinczyks
+dining out,fast food
+dining out,fast_food
+dining out,fastfood
+dining out,milk bars
+dining out,restaurants
+dining_out,bakery
+dining_out,vending machines
+entertainment+subscriptions,subscriptions
+groceries,bakery
+groceries,convinience_store
+groceries,discount_store
+health,pharmacy
+health,vision
+housing,rent
+housing,rent_reimbursment
+income,salary
+income,scholarship
+savings,
+savings,auto_savings
+shopping_and_services,beauty
+shopping_and_services,clothing
+shopping_and_services,home_goods
+shopping_and_services,music
+shopping_and_services,online_shopping
+transport,lime
+transport,tickets
+transport,uber/bolt
