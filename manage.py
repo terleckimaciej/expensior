@@ -8,6 +8,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
 from app.core.database import get_db_connection
 from app.services.importer import import_file
 from app.services.classifier import run_classification
+from app.services.rules_manager import load_rules_from_csv
 
 def cmd_import(args):
     """Import CSV file."""
@@ -46,6 +47,26 @@ def cmd_init_db(args):
     conn.close()
     print("Done.")
 
+def cmd_load_rules(args):
+    """Load rules from CSV."""
+    from app.core.config import DATA_DIR
+    default_csv = DATA_DIR / "rules.csv"
+    
+    csv_path = args.csv if args.csv else str(default_csv)
+    
+    print(f"Loading rules from {csv_path}...")
+    conn = get_db_connection()
+    try:
+        conn.execute("BEGIN")
+        count = load_rules_from_csv(conn, csv_path, clear_existing=args.clear)
+        conn.commit()
+        print(f"Successfully loaded {count} rules.")
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: {e}")
+    finally:
+        conn.close()
+
 def main():
     parser = argparse.ArgumentParser(description="Expensior Management CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -65,6 +86,12 @@ def main():
     # Init DB Command
     init_parser = subparsers.add_parser("init-db", help="Initialize database from schema")
     init_parser.set_defaults(func=cmd_init_db)
+
+    # Load Rules Command
+    rules_parser = subparsers.add_parser("load-rules", help="Load rules from CSV")
+    rules_parser.add_argument("--csv", help="Path to rules CSV")
+    rules_parser.add_argument("--clear", action="store_true", help="Clear existing rules")
+    rules_parser.set_defaults(func=cmd_load_rules)
 
     args = parser.parse_args()
     
