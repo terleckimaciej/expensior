@@ -1,13 +1,16 @@
 import sqlite3
+import os
 from .config import DB_PATH
 
 def get_db_connection():
     """
-    Returns a raw sqlite3 connection (compatible with pandas).
+    Returns a raw sqlite3 connection.
     """
-    # Ensure the directory exists
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    # Debug: Print where we are looking for the DB
+    if not os.path.exists(DB_PATH):
+        print(f"CRITICAL ERROR: Database file not found at: {DB_PATH}")
+        # We assume the API strictly needs the DB to exist.
     
-    conn = sqlite3.connect(str(DB_PATH))
-    # conn.row_factory = sqlite3.Row # Optional, but good for dict-like access
+    # Enable check_same_thread=False to avoid threading issues with FastAPI reloading
+    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     return conn
