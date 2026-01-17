@@ -1,10 +1,8 @@
-import argparse
 import hashlib
-import os
 import sqlite3
 from datetime import datetime, timezone
-
 import pandas as pd
+import os
 
 # -------------------------
 # Helpers
@@ -38,7 +36,7 @@ def short_hash(*values, length=4) -> str:
 
 
 # -------------------------
-# Transform logic (mirrors notebook)
+# Transform logic
 # -------------------------
 
 transaction_type_map = {
@@ -246,7 +244,6 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
     # -------------------------
 
     # 1. Fill empty/null transaction_ids with deterministic synthetic hash
-    #    (no row index so the same logical transaction keeps the same ID across imports)
     missing_mask = df_std['transaction_id'].isna() | (df_std['transaction_id'] == '')
     if missing_mask.any():
         df_std.loc[missing_mask, 'transaction_id'] = df_std[missing_mask].apply(
@@ -263,7 +260,7 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
             axis=1
         )
 
-    # 2. Handle duplicates within the current CSV deterministycznie (bez numeru wiersza)
+    # 2. Handle duplicates within the current CSV deterministically
     dup_mask = df_std['transaction_id'].duplicated(keep=False)
     if dup_mask.any():
         def dedup_row(row):
@@ -337,37 +334,25 @@ def insert_transactions(conn: sqlite3.Connection, df_std: pd.DataFrame, batch_id
     return {'attempted': len(rows), 'changes': conn.total_changes}
 
 
-# -------------------------
-# CLI
-# -------------------------
-
-def main():
-    parser = argparse.ArgumentParser(description="Extract/Transform PKO CSV and load into SQLite DB")
-    parser.add_argument('--input', required=True, help='Path to input CSV')
-    parser.add_argument('--db', default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'expensior.db'))
-    parser.add_argument('--on-conflict', choices=['ignore', 'replace', 'abort'], default='ignore')
-    parser.add_argument('--dry-run', action='store_true')
-    args = parser.parse_args()
-
+def import_file(file_path: str, conn: sqlite3.Connection, on_conflict: str = 'ignore', dry_run: bool = False):
+    """
+    Orchestration function to be called from API or CLI
+    """
     # Load CSV
-    df = pd.read_csv(args.input, encoding='latin2')
+    df = pd.read_csv(file_path, encoding='latin2')
     df_std = transform(df)
 
-    # Summary of ID types for visibility
-    synthetic_count = df_std['transaction_id'].str.startswith('synthetic-').sum()
-    dup_count = df_std['transaction_id'].str.contains('-dup-').sum()
-    natural_count = len(df_std) - synthetic_count - dup_count
+    batch_id = make_batch_id(file_path)
+    source_file = os.path.basename(file_path)
 
-    batch_id = make_batch_id(args.input)
-    source_file = os.path.basename(args.input)
+    if dry_run:
+        return {
+            "batch_id": batch_id,
+            "row_count": len(df_std),
+            "status": "dry_run",
+            "preview": df_std.head(5).to_dict()
+        }
 
-    if args.dry_run:
-        print(f"[DRY] rows={len(df_std)}, batch_id={batch_id}, file={source_file}")
-        print(f"Natural IDs: {natural_count} | Synthetic: {synthetic_count} | Duplicates-in-file: {dup_count}")
-        print(df_std.head(5))
-        return
-
-    conn = sqlite3.connect(args.db)
     try:
         conn.execute('PRAGMA foreign_keys = ON')
         conn.execute('BEGIN')
@@ -377,21 +362,20 @@ def main():
             raise RuntimeError(f"import_batch_id already exists: {batch_id}")
 
         insert_import_batch(conn, batch_id, source_file, len(df_std), status='ok')
-        stats = insert_transactions(conn, df_std, batch_id, on_conflict=args.on_conflict)
+        stats = insert_transactions(conn, df_std, batch_id, on_conflict=on_conflict)
         conn.commit()
-        print(f"Batch {batch_id} inserted. {stats}")
-        print(f"Natural IDs: {natural_count} | Synthetic: {synthetic_count} | Duplicates-in-file: {dup_count}")
+        
+        return {
+            "batch_id": batch_id,
+            "row_count": len(df_std),
+            "stats": stats
+        }
     except Exception as e:
         conn.rollback()
+        # Try to log failure
         try:
             conn.execute("UPDATE import_batches SET status='failed' WHERE import_batch_id=?", (batch_id,))
             conn.commit()
-        except Exception:
+        except:
             pass
-        raise
-    finally:
-        conn.close()
-
-
-if __name__ == '__main__':
-    main()
+        raise e

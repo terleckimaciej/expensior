@@ -1,0 +1,6 @@
+# Core data processing
+pandas>=2.0.0
+
+# Optional development tools
+# jupyter>=1.0.0
+# notebook>=7.0.0
