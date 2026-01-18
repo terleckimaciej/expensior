@@ -187,14 +187,131 @@ def view_management():
 
     elif tool == "Rules Editor":
         st.header("Manage Rules")
-        st.markdown("Here you can edit categorization rules.")
         
-        # Placeholder for Rules CRUD
-        st.warning("Rules management UI coming soon.")
+        # 1. Fetch Data
+        rules_data = []
+        try:
+            r = requests.get(f"{API_URL}/rules")
+            if r.status_code == 200:
+                rules_data = r.json()
+        except Exception as e:
+            st.error(f"Failed to load rules: {e}")
+
+        df_rules = pd.DataFrame(rules_data)
         
-        # Maybe show current rules?
-        # df_rules = ... fetch rules ...
-        # st.data_editor(df_rules)
+        # Prepare Dropdown Lists
+        cat_tree = fetch_categories_tree()
+        cat_map = {c['category']: c for c in cat_tree}
+        
+        all_categories = sorted(list(cat_map.keys()))
+        # Flatten subcategories for the second dropdown
+        all_subcategories = []
+        for c in cat_tree:
+            for s in c.get('subcategories', []):
+                all_subcategories.append(s['category'])
+        all_subcategories = sorted(list(set(all_subcategories)))
+
+        # 2. Display Editor
+        if not df_rules.empty:
+            # We must designate ID column to track edits, but hide it usually
+            # But st.data_editor needs 'id' if we want to handle updates specifically?
+            # Ideally we rely on row index matching if we sort strictly.
+            # Best way: keep 'id' visible or use it for matching.
+            
+            edited_df = st.data_editor(
+                df_rules,
+                num_rows="dynamic",
+                key="rules_editor",
+                column_config={
+                    "id": st.column_config.NumberColumn(disabled=True),
+                    "category": st.column_config.SelectboxColumn(
+                        "Category",
+                        help="Main Category",
+                        width="medium",
+                        options=all_categories,
+                        required=True,
+                    ),
+                    "subcategory": st.column_config.SelectboxColumn(
+                        "Subcategory",
+                        help="Subcategory (Optional)",
+                        width="medium",
+                        options=all_subcategories,
+                    ),
+                    "match_type": st.column_config.SelectboxColumn(
+                        "Match Type",
+                        options=["contains", "regex"],
+                        required=True,
+                        default="contains"
+                    ),
+                    "source_column": st.column_config.SelectboxColumn(
+                        "Source",
+                        options=["description", "transaction_type"],
+                        required=True,
+                        default="description"
+                    ),
+                    "priority": st.column_config.NumberColumn(
+                        "Priority",
+                        min_value=1,
+                        max_value=100,
+                        default=10
+                    ),
+                    # Hide internal columns
+                    "category_id": None
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            # 3. Handle Changes
+            if st.button("Save Changes"):
+                # Detect Added Rows
+                # data_editor state is complex.
+                # A simpler approach for MVP: Iterate rows and upsert.
+                # But 'edited_df' contains the FINAL state.
+                # Which rows are new? Those with NaN/None/0 ID.
+                
+                progress_text = st.empty()
+                updated_count = 0
+                created_count = 0
+                
+                for index, row in edited_df.iterrows():
+                    rule_payload = {
+                        "pattern": row['pattern'],
+                        "match_type": row['match_type'],
+                        "source_column": row['source_column'],
+                        "merchant": row['merchant'],
+                        "category": row['category'],
+                        "subcategory": row['subcategory'],
+                        "conditions": row['conditions'],
+                        "priority": int(row['priority']) if pd.notna(row['priority']) else 10
+                    }
+                    
+                    # Logic: If 'id' is present and valid (>0), it's an update.
+                    # If 'id' is missing/NaN (new row in Editor), it's a create.
+                    
+                    try:
+                        is_existing = pd.notna(row.get('id')) and row.get('id') > 0
+                        
+                        if is_existing:
+                            # Update
+                            rid = int(row['id'])
+                            # Compare with original to avoid spamming API? 
+                            # For MVP, we can just PUT all, or try to diff.
+                            # Let's PUT all for safety.
+                            requests.put(f"{API_URL}/rules/{rid}", json=rule_payload)
+                            updated_count += 1
+                        else:
+                            # Create - Check if pattern exists?
+                            if rule_payload['pattern']:
+                                requests.post(f"{API_URL}/rules/", json=rule_payload)
+                                created_count += 1
+                    except Exception as e:
+                        st.error(f"Error saving rule: {row['pattern']} - {e}")
+                
+                st.success(f"Saved! Updated: {updated_count}, Created: {created_count}")
+                st.rerun() # Refresh to get new IDs
+        else:
+            st.info("No rules found. Add one manually?")
 
     elif tool == "Bulk Categorization":
         st.header("Bulk Edit Transactions")
