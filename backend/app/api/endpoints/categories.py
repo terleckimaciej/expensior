@@ -21,8 +21,8 @@ def read_categories(db: sqlite3.Connection = Depends(get_db)):
     """
     Get all categories with their subcategories structured hierarchically.
     """
-    # Fetch all categories
-    cursor = db.execute("SELECT id, name, parent_id FROM categories ORDER BY name")
+    # Fetch all categories - Updated column names
+    cursor = db.execute("SELECT category_id, category, parent_id FROM categories ORDER BY category")
     rows = cursor.fetchall()
     
     # Organize into dicts
@@ -35,7 +35,7 @@ def read_categories(db: sqlite3.Connection = Depends(get_db)):
         cat_dict = dict(row)
         cat_dict['subcategories'] = []
         raw_cats.append(cat_dict)
-        categories_map[cat_dict['id']] = cat_dict
+        categories_map[cat_dict['category_id']] = cat_dict
 
     # Second pass: Build tree
     for cat in raw_cats:

@@ -42,13 +42,35 @@ def load_rules_from_csv(conn: sqlite3.Connection, csv_path: str, clear_existing:
                 priority_str = row.get('priority', '10').strip()
                 priority = int(priority_str) if priority_str else 10
                 
+                # Resolve category_id
+                category_id = None
+                if category:
+                    # Try exact match first
+                    if subcategory:
+                        cur = conn.execute("""
+                            SELECT c.category_id 
+                            FROM categories c
+                            JOIN categories p ON c.parent_id = p.category_id
+                            WHERE c.category = ? AND p.category = ?
+                        """, (subcategory, category))
+                        res = cur.fetchone()
+                        if res:
+                            category_id = res[0]
+                    
+                    if not category_id:
+                        # Try just parent category
+                        cur = conn.execute("SELECT category_id FROM categories WHERE category = ? AND parent_id IS NULL", (category,))
+                        res = cur.fetchone()
+                        if res:
+                            category_id = res[0]
+
                 conn.execute(
                     """
                     INSERT INTO rules 
-                    (pattern, match_type, source_column, merchant, category, subcategory, conditions, priority)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (pattern, match_type, source_column, merchant, category, subcategory, category_id, conditions, priority)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (pattern, match_type, source_column, merchant, category, subcategory, conditions, priority)
+                    (pattern, match_type, source_column, merchant, category, subcategory, category_id, conditions, priority)
                 )
                 rows_inserted += 1
         

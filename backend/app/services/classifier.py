@@ -177,6 +177,7 @@ def load_rules(conn: sqlite3.Connection) -> pd.DataFrame:
         merchant,
         category,
         subcategory,
+        category_id,
         conditions,
         priority
     FROM rules
@@ -203,21 +204,13 @@ def save_classifications(conn: sqlite3.Connection, df: pd.DataFrame) -> dict:
     
     rows = []
     for _, row in classified.iterrows():
-        rows.append((
-            row["transaction_id"],
-            row["category"],
-            row["subcategory"],
-            row["merchant"],
-            "method", # Just a placeholder since it was strict in original
-            int(row["rule_id"]),
-            1,  # is_current
-        ))
-    
-    # Original script had 'method'='rule' hardcoded in loop, let's fix that
-    # The previous code had: "rule",  # method
-    # Let's rebuild rows properly
-    rows = []
-    for _, row in classified.iterrows():
+         # handle category_id: it might be NaN/float because of pandas merge, convert to int or None
+         cid = row.get("category_id")
+         if pd.isna(cid):
+             cid = None
+         else:
+             cid = int(cid)
+
          rows.append((
             row["transaction_id"],
             row["category"],
@@ -225,13 +218,14 @@ def save_classifications(conn: sqlite3.Connection, df: pd.DataFrame) -> dict:
             row["merchant"],
             "rule",  # method
             int(row["rule_id"]),
+            cid,     # category_id
             1,  # is_current
         ))
 
     sql = """
     INSERT INTO transaction_classifications 
-    (transaction_id, category, subcategory, merchant, method, rule_id, is_current)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    (transaction_id, category, subcategory, merchant, method, rule_id, category_id, is_current)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """
     
     conn.executemany(sql, rows)

@@ -32,6 +32,7 @@ def read_transactions(
         t.*,
         tc.category,
         tc.subcategory,
+        tc.category_id,
         tc.merchant
     FROM transactions t
     LEFT JOIN transaction_classifications tc 
@@ -57,6 +58,7 @@ def read_transaction(transaction_id: str, db: sqlite3.Connection = Depends(get_d
         t.*,
         tc.category,
         tc.subcategory,
+        tc.category_id,
         tc.merchant
     FROM transactions t
     LEFT JOIN transaction_classifications tc 

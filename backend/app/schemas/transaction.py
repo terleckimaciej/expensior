@@ -18,6 +18,7 @@ class Transaction(TransactionBase):
     transaction_id: str
     category: Optional[str] = None
     subcategory: Optional[str] = None
+    category_id: Optional[int] = None
     merchant: Optional[str] = None
     
     class Config:

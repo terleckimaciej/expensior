@@ -5,14 +5,14 @@
 --    Used for dropdowns and validation.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS categories (
-  id               INTEGER PRIMARY KEY AUTOINCREMENT,
-  name             TEXT NOT NULL,
+  category_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  category         TEXT NOT NULL,
   parent_id        INTEGER,
 
-  FOREIGN KEY (parent_id) REFERENCES categories(id)
+  FOREIGN KEY (parent_id) REFERENCES categories(category_id)
     ON DELETE CASCADE,
 
-  UNIQUE(name, parent_id)
+  UNIQUE(category, parent_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_categories_parent
@@ -76,11 +76,15 @@ CREATE TABLE IF NOT EXISTS rules (
   merchant         TEXT,                             -- merchant name (nullable)
   category         TEXT,                             -- main category (nullable)
   subcategory      TEXT,                             -- subcategory (nullable)
+  category_id      INTEGER,                          -- FK to categories(category_id)
   conditions       TEXT,                             -- JSON object for extra conditions (nullable)
   priority         INTEGER NOT NULL DEFAULT 10,      -- higher number = higher priority
 
   created_at       TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at       TEXT
+  updated_at       TEXT,
+
+  FOREIGN KEY (category_id) REFERENCES categories(category_id)
+    ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_rules_match_type
@@ -94,8 +98,9 @@ CREATE INDEX IF NOT EXISTS idx_rules_match_type
 CREATE TABLE IF NOT EXISTS transaction_classifications (
   classification_id  INTEGER PRIMARY KEY AUTOINCREMENT,
   transaction_id     TEXT NOT NULL,
-  category           TEXT NOT NULL,
-  subcategory        TEXT,                           -- optional
+  category           TEXT NOT NULL,                  -- text name (deprecated in future)
+  subcategory        TEXT,                           -- text name (deprecated in future)
+  category_id        INTEGER,                        -- FK to categories(category_id)
   merchant           TEXT,                           -- optional  
   method             TEXT NOT NULL,                  -- 'rule' | 'manual'
   rule_id            INTEGER,                        -- nullable when manual
@@ -108,6 +113,9 @@ CREATE TABLE IF NOT EXISTS transaction_classifications (
 
   FOREIGN KEY (rule_id) REFERENCES rules(id)
     ON UPDATE CASCADE
+    ON DELETE SET NULL,
+
+  FOREIGN KEY (category_id) REFERENCES categories(category_id)
     ON DELETE SET NULL
 );
 
@@ -139,7 +147,7 @@ CREATE TABLE IF NOT EXISTS transaction_flags (
     ON UPDATE CASCADE
     ON DELETE CASCADE,
 
-  FOREIGN KEY (rule_id) REFERENCES rules(rule_id)
+  FOREIGN KEY (rule_id) REFERENCES rules(id)
     ON UPDATE CASCADE
     ON DELETE SET NULL
 );

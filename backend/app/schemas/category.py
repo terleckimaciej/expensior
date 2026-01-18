@@ -1,19 +1,19 @@
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 
 class CategoryBase(BaseModel):
-    name: str
+    category: str
 
 class SubCategory(CategoryBase):
-    id: int
+    category_id: int
     parent_id: int
 
     class Config:
         from_attributes = True
 
 class Category(CategoryBase):
-    id: int
+    category_id: int
     subcategories: List[SubCategory] = []
 
     class Config:

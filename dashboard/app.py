@@ -76,7 +76,8 @@ except:
     pass
 
 # Map category names to their dict for easy lookup
-cat_map = {c['name']: c for c in cat_tree}
+# Update: Schema changed (name -> category)
+cat_map = {c['category']: c for c in cat_tree}
 all_main_cats = sorted(cat_map.keys())
 
 # 2. Main Category Selection
@@ -86,7 +87,7 @@ selected_main = st.sidebar.multiselect("Main Category", all_main_cats, default=a
 available_subs = []
 for m in selected_main:
     if m in cat_map:
-        subs = [s['name'] for s in cat_map[m].get('subcategories', [])]
+        subs = [s['category'] for s in cat_map[m].get('subcategories', [])]
         available_subs.extend(subs)
 
 # If no main category selected, show no subcategories? Or all? 
