@@ -19,7 +19,7 @@ def refresh_data():
 
 # --- API Functions ---
 @st.cache_data(ttl=60)
-def fetch_transactions(limit=2000):
+def fetch_transactions(limit=2000, _refresh_key=0):
     try:
         response = requests.get(f"{API_URL}/transactions", params={"limit": limit})
         response.raise_for_status()
@@ -44,7 +44,7 @@ def view_analytics():
     st.title("📊 Analytics Dashboard")
     
     # --- Load Data ---
-    raw_data = fetch_transactions(limit=5000)
+    raw_data = fetch_transactions(limit=5000, _refresh_key=st.session_state.refresh_key)
     if not raw_data:
         st.info("No transactions found.")
         return
@@ -314,9 +314,123 @@ def view_management():
             st.info("No rules found. Add one manually?")
 
     elif tool == "Bulk Categorization":
-        st.header("Bulk Edit Transactions")
-        st.markdown("Filter and update multiple transactions at once.")
-        st.info("Feature under construction.")
+        st.header("Manual Categorization")
+        st.markdown("Assign categories to transactions manually.")
+        
+        # 1. Fetch Categories & Prepare Options
+        cat_tree = fetch_categories_tree()
+        flat_categories = []
+        for c in cat_tree:
+            flat_categories.append(c['category'])
+            for s in c.get('subcategories', []):
+                flat_categories.append(f"{c['category']}: {s['category']}")
+        flat_categories.sort()
+
+        # 2. Fetch Transactions
+        show_all = st.checkbox("Show all transactions (including categorized)", value=False)
+        
+        tx_data = fetch_transactions(limit=2000, _refresh_key=st.session_state.refresh_key)
+        
+        if tx_data:
+            df_tx = pd.DataFrame(tx_data)
+            
+            # Helper to create display string
+            def make_display(row):
+                if not row['category']: 
+                    return None
+                if row['subcategory']:
+                    return f"{row['category']}: {row['subcategory']}"
+                return row['category']
+                
+            df_tx['category_display'] = df_tx.apply(make_display, axis=1)
+            
+            # Filter
+            if not show_all:
+                df_tx = df_tx[df_tx['category'].isna()]
+                st.caption(f"Showing {len(df_tx)} uncategorized transactions.")
+            else:
+                st.caption(f"Showing {len(df_tx)} transactions.")
+
+            if not df_tx.empty:
+                # Select columns
+                # Ensure date is string for display or datetime
+                df_tx['date_str'] = df_tx['date'].astype(str)
+                
+                cols = ['transaction_id', 'date', 'merchant', 'description', 'amount', 'category_display']
+                
+                # Editor
+                edited_df = st.data_editor(
+                    df_tx[cols],
+                    key="tx_editor",
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "transaction_id": st.column_config.TextColumn(disabled=True),
+                        "date": st.column_config.TextColumn(disabled=True),
+                        "merchant": st.column_config.TextColumn("Merchant (Editable)", disabled=False), 
+                        "description": st.column_config.TextColumn(disabled=True),
+                        "amount": st.column_config.NumberColumn(disabled=True, format="%.2f"),
+                        "category_display": st.column_config.SelectboxColumn(
+                            "Category",
+                            options=flat_categories,
+                            required=False,
+                            width="large"
+                        )
+                    }
+                )
+                
+                if st.button("Save Categorization Changes"):
+                    changes = 0
+                    
+                    # We iterate the edited dataframe.
+                    # We need to compare specific fields for changes.
+                    
+                    for index, row in edited_df.iterrows():
+                        tid = row['transaction_id']
+                        # Find original in the currently loaded dataframe
+                        # (Ideally we tracked changes via session state, but this is stateless 'brute check')
+                        orig_rows = df_tx[df_tx['transaction_id'] == tid]
+                        if orig_rows.empty: continue
+                        
+                        orig = orig_rows.iloc[0]
+                        
+                        new_cat_str = row['category_display']
+                        old_cat_str = orig['category_display']
+                        
+                        new_merch = row['merchant']
+                        old_merch = orig['merchant']
+                        
+                        # Compare (handling NaNs)
+                        cat_changed = (new_cat_str != old_cat_str) and not (pd.isna(new_cat_str) and pd.isna(old_cat_str))
+                        merch_changed = (new_merch != old_merch)
+                        
+                        if cat_changed or merch_changed:
+                            # Prepare payload
+                            cat, sub = None, None
+                            
+                            if pd.notna(new_cat_str) and new_cat_str:
+                                parts = new_cat_str.split(": ")
+                                cat = parts[0]
+                                if len(parts) > 1: sub = parts[1]
+                            
+                            try:
+                                requests.put(f"{API_URL}/transactions/{tid}/categorize", json={
+                                    "category": cat,
+                                    "subcategory": sub,
+                                    "merchant": new_merch
+                                })
+                                changes += 1
+                            except Exception as e:
+                                st.error(f"Error updating {tid}: {e}")
+                    
+                    if changes > 0:
+                        st.success(f"Updated {changes} transactions.")
+                        refresh_data()
+                        st.rerun()
+                    else:
+                        st.info("No changes detected.")
+            else:
+                st.info("No transactions match the filter.")
 
 
 # --- Main Router ---
