@@ -167,6 +167,7 @@ def view_management():
     tool = st.sidebar.radio("Select Tool:", [
         "Upload CSV", 
         "Rules Editor", 
+        "Categories",
         "Bulk Categorization"
     ])
     
@@ -312,6 +313,139 @@ def view_management():
                 st.rerun() # Refresh to get new IDs
         else:
             st.info("No rules found. Add one manually?")
+
+    elif tool == "Categories":
+        st.header("Category Management")
+        
+        # 1. VISUALIZATION (Sunburst)
+        st.subheader("Structure Visualization")
+        cat_tree = fetch_categories_tree()
+        
+        if cat_tree:
+            # Flatten for Plotly Sunburst
+            # Columns: [id, label, parent]
+            sunburst_data = []
+            
+            # Root node
+            sunburst_data.append({"id": "ROOT", "label": "Expenses", "parent": ""})
+            
+            for main_cat in cat_tree:
+                mid = f"M_{main_cat['category_id']}"
+                sunburst_data.append({
+                    "id": mid, 
+                    "label": main_cat['category'], 
+                    "parent": "ROOT"
+                })
+                
+                for sub in main_cat.get('subcategories', []):
+                    sid = f"S_{sub['category_id']}"
+                    sunburst_data.append({
+                        "id": sid,
+                        "label": sub['category'],
+                        "parent": mid
+                    })
+            
+            df_sun = pd.DataFrame(sunburst_data)
+            fig = px.sunburst(
+                df_sun,
+                names='label',
+                parents='parent',
+                ids='id',
+            )
+            fig.update_layout(margin=dict(t=0, l=0, r=0, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("---")
+        
+        # 2. MANAGEMENT INTERFACE
+        st.subheader("Manage Categories")
+        
+        # Add New Main Category
+        with st.form("new_main_cat"):
+            c1, c2 = st.columns([3, 1])
+            new_main_name = c1.text_input("New Main Category Name")
+            if c2.form_submit_button("Add Group"):
+                if new_main_name:
+                    try:
+                        requests.post(f"{API_URL}/categories/", json={"category": new_main_name})
+                        st.success("Created!")
+                        fetch_categories_tree.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+        # Iterate Main Categories
+        for main_cat in cat_tree:
+            with st.expander(f"📁 {main_cat['category']} ({len(main_cat.get('subcategories', []))} items)"):
+                
+                # A. Rename Main Category
+                with st.popover("Rename Group"):
+                    new_name = st.text_input("New Name", value=main_cat['category'], key=f"ren_{main_cat['category_id']}")
+                    if st.button("Update Name", key=f"btn_ren_{main_cat['category_id']}"):
+                         requests.put(f"{API_URL}/categories/{main_cat['category_id']}", json={"category": new_name})
+                         fetch_categories_tree.clear()
+                         st.rerun()
+                
+                # B. Subcategories Editor
+                subs = main_cat.get('subcategories', [])
+                df_subs = pd.DataFrame(subs)
+                
+                if df_subs.empty:
+                    # Initialize empty frame if needed for editor to show up specifically for adding
+                    df_subs = pd.DataFrame(columns=["category_id", "category", "parent_id"])
+                
+                # Display Editor
+                # We only allow editing the name.
+                edited_subs = st.data_editor(
+                    df_subs,
+                    key=f"editor_{main_cat['category_id']}",
+                    column_config={
+                        "category_id": None,
+                        "parent_id": None,
+                        "category": st.column_config.TextColumn("Subcategory Name", required=True)
+                    },
+                    num_rows="dynamic",
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                # C. Save Changes
+                if st.button("Save Changes", key=f"save_{main_cat['category_id']}"):
+                    # Logic to detect diffs is hard with dynamic rows.
+                    # Simplified: 
+                    # 1. Existing rows (have ID) -> Update
+                    # 2. New rows (no ID) -> Create
+                    # 3. Deleted rows -> Delete (This is tricky with data_editor, as it returns the FINAL state)
+                    # To handle deletions, we need to know what WAS there.
+                    
+                    current_ids = {row['category_id'] for row in subs}
+                    final_ids = set()
+                    
+                    for index, row in edited_subs.iterrows():
+                        # Handle New
+                        if pd.isna(row.get('category_id')):
+                             requests.post(f"{API_URL}/categories/", json={
+                                 "category": row['category'],
+                                 "parent_id": main_cat['category_id']
+                             })
+                        else:
+                            # Handle Update
+                            cid = int(row['category_id'])
+                            final_ids.add(cid)
+                            # Check if name changed to save API calls
+                            orig = next((x for x in subs if x['category_id'] == cid), None)
+                            if orig and orig['category'] != row['category']:
+                                requests.put(f"{API_URL}/categories/{cid}", json={"category": row['category']})
+                    
+                    # Handle Deletions
+                    # If ID was in current but not in final, it was deleted.
+                    to_delete = current_ids - final_ids
+                    for did in to_delete:
+                        requests.delete(f"{API_URL}/categories/{did}")
+                    
+                    st.success("Saved!")
+                    fetch_categories_tree.clear()
+                    st.rerun()
 
     elif tool == "Bulk Categorization":
         st.header("Manual Categorization")

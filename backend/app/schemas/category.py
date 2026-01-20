@@ -5,6 +5,12 @@ from typing import List, Optional
 class CategoryBase(BaseModel):
     category: str
 
+class CategoryCreate(CategoryBase):
+    parent_id: Optional[int] = None
+
+class CategoryUpdate(CategoryBase):
+    pass
+
 class SubCategory(CategoryBase):
     category_id: int
     parent_id: int
