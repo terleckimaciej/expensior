@@ -2,11 +2,18 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 import sqlite3
+import hashlib
 
 from app.core.database import get_db_connection
-from app.schemas.transaction import Transaction, TransactionUpdate
+from app.schemas.transaction import Transaction, TransactionUpdate, TransactionCreate
 
 router = APIRouter()
+
+# Helper for ID generation (simplified version of importer's helper)
+def short_hash(*values, length=8) -> str:
+    base = "|".join(str(v) for v in values)
+    h = hashlib.sha256(base.encode()).hexdigest()
+    return h[:length]
 
 # Dependency to get DB connection per request (and close it after)
 def get_db():
@@ -50,6 +57,92 @@ def resolve_category_id(db: sqlite3.Connection, category: str, subcategory: str 
             cat_id = row[0]
             
     return cat_id
+
+@router.post("/", response_model=Transaction)
+def create_transaction(
+    tx_data: TransactionCreate,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Manually create a new transaction.
+    ID is generated deterministically using 'manual-{hash}' format.
+    Hash components: date, transaction_type, amount, currency, description.
+    Merchant and Category are strictly classification data.
+    """
+    
+    # 1. Generate ID
+    # consistent with importer fallback logic but with 'manual-' prefix
+    sig = short_hash(
+        tx_data.date, 
+        tx_data.transaction_type, 
+        tx_data.amount, 
+        tx_data.currency, 
+        tx_data.description
+    )
+    new_id = f"manual-{sig}"
+    
+    # 2. Check existence
+    existing = db.execute("SELECT transaction_id FROM transactions WHERE transaction_id = ?", (new_id,)).fetchone()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Transaction already exists with ID: {new_id}")
+
+    # 3. Resolve Category (if provided)
+    cat_id = None
+    if tx_data.category:
+        cat_id = resolve_category_id(db, tx_data.category, tx_data.subcategory)
+
+    try:
+        db.execute("BEGIN")
+        
+        # 4. Insert Transaction (Raw Data Only - NO MERCHANT HERE)
+        db.execute("""
+            INSERT INTO transactions 
+            (transaction_id, date, transaction_type, amount, currency, description, import_batch_id)
+            VALUES (?, ?, ?, ?, ?, ?, 'manual')
+        """, (
+            new_id,
+            tx_data.date.isoformat(),
+            tx_data.transaction_type,
+            tx_data.amount,
+            tx_data.currency,
+            tx_data.description or ""
+        ))
+        
+        # 5. Insert Classification (Merchant + Category info goes here)
+        # We always want a classification row for manual entries if category OR merchant is provided.
+        # Even if category is missing, merchant might be valuable.
+        if tx_data.category or tx_data.merchant: 
+            db.execute("""
+                INSERT INTO transaction_classifications 
+                (transaction_id, category, subcategory, merchant, category_id, method, is_current)
+                VALUES (?, ?, ?, ?, ?, 'manual', 1)
+            """, (
+                new_id,
+                tx_data.category,
+                tx_data.subcategory,
+                tx_data.merchant,
+                cat_id
+            ))
+            
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    # Construct response object manually to ensure all fields are reflected
+    return Transaction(
+        transaction_id=new_id,
+        date=tx_data.date, 
+        transaction_type=tx_data.transaction_type,
+        amount=tx_data.amount,
+        currency=tx_data.currency,
+        description=tx_data.description or "",
+        merchant=tx_data.merchant,
+        category=tx_data.category,
+        subcategory=tx_data.subcategory,
+        category_id=cat_id
+    )
+
 
 @router.get("/", response_model=List[Transaction])
 def read_transactions(

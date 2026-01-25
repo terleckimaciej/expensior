@@ -244,6 +244,55 @@ def view_transactions_manager(mode: str = "all"):
             flat_categories.append(f"{c['category']}: {s['category']}")
     flat_categories.sort()
 
+    # --- 1.5 Add Manual Transaction Form ---
+    with st.expander("➕ Add New Transaction"):
+        with st.form("manual_tx_form"):
+            c_date, c_amount, c_curr = st.columns([1, 1, 1])
+            f_date = c_date.date_input("Date", value=datetime.today())
+            f_amount = c_amount.number_input("Amount (Negative for expense)", step=0.01, format="%.2f")
+            f_curr = c_curr.selectbox("Currency", ["PLN", "EUR", "USD"], index=0)
+            
+            c_type, c_desc, c_merch = st.columns([1, 1.5, 1.5])
+            f_type = c_type.selectbox("Transaction Type", [
+                "card_payment", "cash", "transfer", "blik", "standing_order"
+            ])
+            f_desc = c_desc.text_input("Description")
+            f_merch = c_merch.text_input("Merchant (for classification)")
+            
+            f_cat = st.selectbox("Category (Optional)", [""] + flat_categories)
+            
+            if st.form_submit_button("Add Transaction"):
+                # Parse Category
+                p_cat, p_sub = None, None
+                if f_cat:
+                    parts = f_cat.split(": ")
+                    p_cat = parts[0]
+                    if len(parts) > 1: p_sub = parts[1]
+
+                payload = {
+                    "date": f_date.isoformat(),
+                    "amount": f_amount,
+                    "currency": f_curr,
+                    "transaction_type": f_type,
+                    "merchant": f_merch,
+                    "description": f_desc,
+                    "category": p_cat,
+                    "subcategory": p_sub
+                }
+                
+                try:
+                    r = requests.post(f"{API_URL}/transactions/", json=payload)
+                    if r.status_code == 200:
+                        st.success("Transaction added!")
+                        refresh_data()
+                        st.rerun()
+                    elif r.status_code == 409:
+                        st.warning("Duplicate transaction detected (same date, type, amount, currency, description).")
+                    else:
+                        st.error(f"Error: {r.text}")
+                except Exception as e:
+                    st.error(f"Request failed: {e}")
+
     # --- 2. Controls & Filters ---
     
     # Date Filter (Integrated from view_transactions)

@@ -29,3 +29,14 @@ class TransactionUpdate(BaseModel):
     category: Optional[str] = None
     subcategory: Optional[str] = None
     merchant: Optional[str] = None
+
+class TransactionCreate(BaseModel):
+    date: date
+    amount: float
+    currency: str = "PLN"
+    transaction_type: str
+    description: str
+    merchant: Optional[str] = None
+    category: Optional[str] = None
+    subcategory: Optional[str] = None
+
