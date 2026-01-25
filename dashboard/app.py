@@ -52,18 +52,130 @@ def view_analytics():
     df = pd.DataFrame(raw_data)
     df['date'] = pd.to_datetime(df['date'])
 
-    # --- Date Filter (Main Area) ---
-    min_date = df['date'].min().date()
-    max_date = df['date'].max().date()
+    # --- Date Filter & Control Panel ---
     
-    c1, c2 = st.columns([1, 3])
-    with c1:
-        start_date, end_date = st.date_input(
-            "Filter Date Range",
-            value=(min_date, max_date),
-            min_value=min_date,
-            max_value=max_date
-        )
+    # Initialize date state if not present (default to max range)
+    if "filter_date_range" not in st.session_state:
+        st.session_state.filter_date_range = (df['date'].min().date(), df['date'].max().date())
+
+    # --- Period Manipulation Logic ---
+    def adjust_period(direction: int):
+        # direction: -1 (prev), 1 (next)
+        period_type = st.session_state.get("period_selector", "Month")
+        
+        # We must use the key of the widget to get the current truth, 
+        # or fall back to our manually tracked state.
+        # Ideally, we bind everything to 'filter_date_range' key.
+        
+        current_val = st.session_state.get("filter_date_range")
+        if not current_val or not isinstance(current_val, tuple) or len(current_val) != 2:
+             current_val = (df['date'].min().date(), df['date'].max().date())
+             
+        current_start, current_end = current_val
+        
+        new_start, new_end = current_start, current_end
+        
+        if period_type == "Month":
+            # Move to start of next/prev month
+            # Calculate logic based on current_start
+            # 1. Go to first day of current month
+            base = current_start.replace(day=1) 
+            # 2. Add/Sub month
+            # Simple way: using pandas offsets or pure python
+            # Let's use simple logic: next month is month+1
+            
+            year, month = base.year, base.month
+            
+            if direction == 1:
+                # Next month
+                month += 1
+                if month > 12:
+                    month = 1
+                    year += 1
+            else:
+                # Prev month
+                month -= 1
+                if month < 1:
+                    month = 12
+                    year -= 1
+            
+            new_start = base.replace(year=year, month=month, day=1)
+            # End of new month
+            next_m = month + 1
+            next_y = year
+            if next_m > 12:
+                next_m = 1
+                next_y += 1
+            # Last day is first day of next month minus 1 day
+            new_end = (new_start.replace(year=next_y, month=next_m, day=1) - timedelta(days=1))
+
+        elif period_type == "Year":
+            new_start = current_start.replace(year=current_start.year + direction, month=1, day=1)
+            new_end = new_start.replace(year=new_start.year, month=12, day=31)
+
+        elif period_type == "Week":
+            # Just Shift by 7 days
+            shift = timedelta(weeks=direction)
+            new_start = current_start + shift
+            new_end = current_end + shift
+            
+        st.session_state.filter_date_range = (new_start, new_end)
+
+
+    # Layout: [ < ] [ Selector ] [ > ]  __________ [ Date Range Picker ]
+    #         col1, col2,      col3     col4       col5
+    
+    # Top Row Container
+    with st.container():
+        # Define columns: Narrow controls on left, spacer, Wide picker on right
+        c_nav_prev, c_nav_sel, c_nav_next, c_spacer, c_picker = st.columns([1, 4, 1, 1, 8])
+        
+        with c_nav_prev:
+            st.markdown("###") # Vertical alignment spacer
+            if st.button("◀", key="btn_prev", help="Previous Period"):
+                adjust_period(-1)
+        
+        with c_nav_sel:
+            # Period Type Selector
+            st.selectbox(
+                "Period Granularity",
+                options=["Month", "Week", "Year"],
+                key="period_selector",
+                label_visibility="collapsed"
+            )
+
+        with c_nav_next:
+            st.markdown("###") # Vertical alignment spacer
+            if st.button("▶", key="btn_next", help="Next Period"):
+                adjust_period(1)
+
+        with c_picker:
+            # Main Date Picker (Source of Truth)
+            # It reads/writes directly to session_state.filter_date_range
+            
+            date_selection = st.date_input(
+                "Filter Date Range",
+                value=st.session_state.filter_date_range,
+                min_value=None,
+                max_value=None,
+                key="filter_date_range" 
+            )
+
+    # Extract dates for filtering
+    # Handle the case where range isn't fully picked yet
+    if isinstance(st.session_state.filter_date_range, tuple) and len(st.session_state.filter_date_range) == 2:
+        start_date, end_date = st.session_state.filter_date_range
+    else:
+        # Fallback
+        start_date, end_date = df['date'].min().date(), df['date'].max().date() 
+
+    # Extract dates for filtering
+    # Handle the case where range isn't fully picked yet
+    if isinstance(st.session_state.filter_date_range, tuple) and len(st.session_state.filter_date_range) == 2:
+        start_date, end_date = st.session_state.filter_date_range
+    else:
+        # Fallback
+        start_date, end_date = df['date'].min().date(), df['date'].max().date()
 
     # Apply Filters
     mask = (
