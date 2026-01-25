@@ -225,46 +225,198 @@ def view_analytics():
 
 
 
+def view_transactions_manager(mode: str = "all"):
+    """
+    Unified Transactions View.
+    mode="all" -> Show all transactions (Analytics mode)
+    mode="uncategorized" -> Show only uncategorized (Management mode), but adjustable via checkbox
+    """
+    st.title("📋 Transactions Manager")
 
-def view_transactions():
-    st.title("📋 Transactions")
+    # --- 1. Fetch Categories for Dropdown ---
+    cat_tree = fetch_categories_tree()
+    flat_categories = []
+    # Add an empty option to allow clearing? Or handle it via None.
+    # Streamlit SelectboxColumn typically requires options.
+    for c in cat_tree:
+        flat_categories.append(c['category'])
+        for s in c.get('subcategories', []):
+            flat_categories.append(f"{c['category']}: {s['category']}")
+    flat_categories.sort()
 
-    # --- Load Data ---
-    raw_data = fetch_transactions(limit=5000, _refresh_key=st.session_state.refresh_key)
-    if not raw_data:
+    # --- 2. Controls & Filters ---
+    
+    # Date Filter (Integrated from view_transactions)
+    # Using a simpler date picker for this view as it's more operational than analytical
+    # But we can reuse state if we wanted. For now, separate state to avoid conflicts.
+    
+    # Layout for controls
+    c_date, c_check = st.columns([2, 2])
+    
+    with c_date:
+        # Default range: Last 90 days? Or Max?
+        # Let's fetch data first to know bounds... but fetch_transactions fetches latest anyway.
+        # We'll just fetch first.
+        pass
+
+    # Fetch Data
+    # Ideally paginated API, but here we fetch 2000 or 5000
+    tx_data = fetch_transactions(limit=5000, _refresh_key=st.session_state.refresh_key)
+    
+    if not tx_data:
         st.info("No transactions found.")
         return
 
-    df = pd.DataFrame(raw_data)
-    df['date'] = pd.to_datetime(df['date'])
+    df_tx = pd.DataFrame(tx_data)
+    df_tx['date'] = pd.to_datetime(df_tx['date'])
 
-    # --- Date Filter ---
-    min_date = df['date'].min().date()
-    max_date = df['date'].max().date()
+    # Determine Date Bounds
+    min_date = df_tx['date'].min().date()
+    max_date = df_tx['date'].max().date()
     
-    c1, c2 = st.columns([1, 3])
-    with c1:
-        start_date, end_date = st.date_input(
-            "Filter Date Range",
+    with c_date:
+         start_date, end_date = st.date_input(
+            "Date Range",
             value=(min_date, max_date),
             min_value=min_date,
             max_value=max_date,
-            key="tx_date_filter"
+            key="tx_mgr_date"
         )
+    
+    # Filter Date
+    mask_date = (df_tx['date'].dt.date >= start_date) & (df_tx['date'].dt.date <= end_date)
+    df_tx = df_tx.loc[mask_date].copy()
 
-    # Apply Filters
-    mask = (
-        (df['date'].dt.date >= start_date) & 
-        (df['date'].dt.date <= end_date)
-    )
-    df_filtered = df.loc[mask]
+    # Mode Toggle
+    with c_check:
+        st.write("") # Spacing
+        st.write("") 
+        # Default value depends on mode passed
+        default_show_all = (mode == "all")
+        show_all = st.checkbox("Show Categorized Transactions", value=default_show_all)
+    
+    # Helper to create display string for category
+    def make_display(row):
+        if not row['category']: 
+            return None
+        if row['subcategory']:
+            return f"{row['category']}: {row['subcategory']}"
+        return row['category']
+        
+    df_tx['category_display'] = df_tx.apply(make_display, axis=1)
 
-    st.dataframe(
-        df_filtered[['date', 'description', 'category', 'subcategory', 'amount', 'currency']]
-        .sort_values('date', ascending=False),
+    # Filter by Categorization Status
+    if not show_all:
+        df_tx = df_tx[df_tx['category'].isna()]
+        st.caption(f"Showing {len(df_tx)} uncategorized transactions.")
+    else:
+        st.caption(f"Showing {len(df_tx)} transactions.")
+
+    if df_tx.empty:
+        st.info("No transactions match the criteria.")
+        return
+
+    # --- 3. Editable Data Table ---
+    # Prepare columns
+    # We want: ID (hidden?), Date, Merchant, Desc, Amount, Category(Dropdown)
+    
+    # Ensure ID is string
+    df_tx['transaction_id'] = df_tx['transaction_id'].astype(str)
+    
+    cols_to_show = ['transaction_id', 'date', 'merchant', 'description', 'amount', 'currency', 'category_display']
+    
+    # Editor Configuration
+    edited_df = st.data_editor(
+        df_tx[cols_to_show],
+        key="tx_manager_editor",
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
+        num_rows="fixed", # No adding new rows
+        column_config={
+            "transaction_id": st.column_config.TextColumn(disabled=True),
+            "date": st.column_config.DatetimeColumn(disabled=True, format="D MMM YYYY"),
+            "merchant": st.column_config.TextColumn("Merchant", disabled=False), 
+            "description": st.column_config.TextColumn("Description", disabled=True),
+            "amount": st.column_config.NumberColumn("Amount", disabled=True, format="%.2f"),
+            "currency": st.column_config.TextColumn("Curr", disabled=True),
+            "category_display": st.column_config.SelectboxColumn(
+                "Category",
+                options=flat_categories,
+                required=False,
+                width="large"
+            )
+        }
     )
+
+    # --- 4. Save Logic ---
+    if st.button("Save Changes", type="primary"):
+        changes = 0
+        progress_bar = st.progress(0)
+        
+        # We iterate to find diffs.
+        # edited_df has the current state of UI.
+        # df_tx has the state before editing (filtered).
+        
+        # Optimization: iterate on edited_df, check against df_tx by ID
+        # Converting to dict for faster lookup
+        original_map = df_tx.set_index('transaction_id')[['category_display', 'merchant']].to_dict('index')
+        
+        total_rows = len(edited_df)
+        processed = 0
+        
+        for index, row in edited_df.iterrows():
+            tid = row['transaction_id']
+            if tid not in original_map:
+                continue # Should not happen unless row ID changed?
+                
+            orig = original_map[tid]
+            
+            new_cat_str = row['category_display']
+            old_cat_str = orig['category_display']
+            
+            new_merch = row['merchant']
+            old_merch = orig['merchant']
+            
+            # Compare
+            # Handle None/NaN
+            cat_changed = (new_cat_str != old_cat_str)
+            if pd.isna(new_cat_str) and pd.isna(old_cat_str): cat_changed = False
+            
+            merch_changed = (new_merch != old_merch)
+            if pd.isna(new_merch) and pd.isna(old_merch): merch_changed = False
+            
+            if cat_changed or merch_changed:
+                # Prepare payload
+                cat, sub = None, None
+                
+                if pd.notna(new_cat_str) and new_cat_str:
+                    parts = new_cat_str.split(": ")
+                    cat = parts[0]
+                    if len(parts) > 1: sub = parts[1]
+                
+                try:
+                    requests.put(f"{API_URL}/transactions/{tid}/categorize", json={
+                        "category": cat,
+                        "subcategory": sub,
+                        "merchant": new_merch
+                    })
+                    changes += 1
+                except Exception as e:
+                    st.error(f"Error updating {tid}: {e}")
+            
+            processed += 1
+            if processed % 10 == 0:
+                progress_bar.progress(min(processed / total_rows, 1.0))
+        
+        progress_bar.empty()
+        
+        if changes > 0:
+            st.success(f"Successfully updated {changes} transactions.")
+            refresh_data() # Update global refresh key
+            st.rerun()
+        else:
+            st.info("No changes detected to save.")
+
 
 def view_management(tool):
     st.title("🛠 Management")
@@ -545,124 +697,11 @@ def view_management(tool):
                     fetch_categories_tree.clear()
                     st.rerun()
 
-    elif tool == "Manual Categorization":
-        st.header("Manual Categorization")
-        st.markdown("Assign categories to transactions manually.")
-        
-        # 1. Fetch Categories & Prepare Options
-        cat_tree = fetch_categories_tree()
-        flat_categories = []
-        for c in cat_tree:
-            flat_categories.append(c['category'])
-            for s in c.get('subcategories', []):
-                flat_categories.append(f"{c['category']}: {s['category']}")
-        flat_categories.sort()
 
-        # 2. Fetch Transactions
-        show_all = st.checkbox("Show all transactions (including categorized)", value=False)
-        
-        tx_data = fetch_transactions(limit=2000, _refresh_key=st.session_state.refresh_key)
-        
-        if tx_data:
-            df_tx = pd.DataFrame(tx_data)
-            
-            # Helper to create display string
-            def make_display(row):
-                if not row['category']: 
-                    return None
-                if row['subcategory']:
-                    return f"{row['category']}: {row['subcategory']}"
-                return row['category']
-                
-            df_tx['category_display'] = df_tx.apply(make_display, axis=1)
-            
-            # Filter
-            if not show_all:
-                df_tx = df_tx[df_tx['category'].isna()]
-                st.caption(f"Showing {len(df_tx)} uncategorized transactions.")
-            else:
-                st.caption(f"Showing {len(df_tx)} transactions.")
+    # elif tool == "Manual Categorization":
+    #    # Deprecated: Merged into unified View Transactions Manager
+    #    pass
 
-            if not df_tx.empty:
-                # Select columns
-                # Ensure date is string for display or datetime
-                df_tx['date_str'] = df_tx['date'].astype(str)
-                
-                cols = ['transaction_id', 'date', 'merchant', 'description', 'amount', 'category_display']
-                
-                # Editor
-                edited_df = st.data_editor(
-                    df_tx[cols],
-                    key="tx_editor",
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "transaction_id": st.column_config.TextColumn(disabled=True),
-                        "date": st.column_config.TextColumn(disabled=True),
-                        "merchant": st.column_config.TextColumn("Merchant (Editable)", disabled=False), 
-                        "description": st.column_config.TextColumn(disabled=True),
-                        "amount": st.column_config.NumberColumn(disabled=True, format="%.2f"),
-                        "category_display": st.column_config.SelectboxColumn(
-                            "Category",
-                            options=flat_categories,
-                            required=False,
-                            width="large"
-                        )
-                    }
-                )
-                
-                if st.button("Save Categorization Changes"):
-                    changes = 0
-                    
-                    # We iterate the edited dataframe.
-                    # We need to compare specific fields for changes.
-                    
-                    for index, row in edited_df.iterrows():
-                        tid = row['transaction_id']
-                        # Find original in the currently loaded dataframe
-                        # (Ideally we tracked changes via session state, but this is stateless 'brute check')
-                        orig_rows = df_tx[df_tx['transaction_id'] == tid]
-                        if orig_rows.empty: continue
-                        
-                        orig = orig_rows.iloc[0]
-                        
-                        new_cat_str = row['category_display']
-                        old_cat_str = orig['category_display']
-                        
-                        new_merch = row['merchant']
-                        old_merch = orig['merchant']
-                        
-                        # Compare (handling NaNs)
-                        cat_changed = (new_cat_str != old_cat_str) and not (pd.isna(new_cat_str) and pd.isna(old_cat_str))
-                        merch_changed = (new_merch != old_merch)
-                        
-                        if cat_changed or merch_changed:
-                            # Prepare payload
-                            cat, sub = None, None
-                            
-                            if pd.notna(new_cat_str) and new_cat_str:
-                                parts = new_cat_str.split(": ")
-                                cat = parts[0]
-                                if len(parts) > 1: sub = parts[1]
-                            
-                            try:
-                                requests.put(f"{API_URL}/transactions/{tid}/categorize", json={
-                                    "category": cat,
-                                    "subcategory": sub,
-                                    "merchant": new_merch
-                                })
-                                changes += 1
-                            except Exception as e:
-                                st.error(f"Error updating {tid}: {e}")
-                    
-                    if changes > 0:
-                        st.success(f"Updated {changes} transactions.")
-                        refresh_data()
-                        st.rerun()
-                    else:
-                        st.info("No changes detected.")
-            else:
-                st.info("No transactions match the filter.")
 
 
 # --- Main Router ---
@@ -746,7 +785,9 @@ if __name__ == "__main__":
     if st.session_state.current_view == "Dashboard":
         view_analytics()
     elif st.session_state.current_view == "Transactions":
-        view_transactions()
+        view_transactions_manager(mode="all")
+    elif st.session_state.current_view == "Manual Categorization":
+        view_transactions_manager(mode="uncategorized")
     else:
         view_management(st.session_state.current_view)
 
