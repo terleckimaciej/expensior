@@ -52,50 +52,24 @@ def view_analytics():
     df = pd.DataFrame(raw_data)
     df['date'] = pd.to_datetime(df['date'])
 
-    # --- Sidebar Filters (Analytics specific) ---
-    st.sidebar.markdown("---")
-    st.sidebar.header("Analytics Filters")
-
-    # Date Range
+    # --- Date Filter (Main Area) ---
     min_date = df['date'].min().date()
     max_date = df['date'].max().date()
-
-    start_date, end_date = st.sidebar.date_input(
-        "Date Range",
-        value=(min_date, max_date),
-        min_value=min_date,
-        max_value=max_date
-    )
-
-    # Category Filter
-    st.sidebar.subheader("Filter by Category")
-    cat_tree = fetch_categories_tree()
     
-    cat_map = {c['category']: c for c in cat_tree}
-    all_main_cats = sorted(cat_map.keys())
-
-    selected_main = st.sidebar.multiselect("Main Category", all_main_cats, default=all_main_cats)
-
-    available_subs = []
-    for m in selected_main:
-        if m in cat_map:
-            subs = [s['category'] for s in cat_map[m].get('subcategories', [])]
-            available_subs.extend(subs)
-
-    selected_subs = st.sidebar.multiselect("Subcategory", sorted(list(set(available_subs))), default=available_subs)
+    c1, c2 = st.columns([1, 3])
+    with c1:
+        start_date, end_date = st.date_input(
+            "Filter Date Range",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date
+        )
 
     # Apply Filters
     mask = (
         (df['date'].dt.date >= start_date) & 
         (df['date'].dt.date <= end_date)
     )
-
-    if selected_main:
-        mask &= df['category'].isin(selected_main)
-
-    if selected_subs:
-        mask &= (df['subcategory'].isin(selected_subs) | df['subcategory'].isna())
-
     df_filtered = df.loc[mask]
 
     # --- KPI Metrics ---
@@ -147,8 +121,42 @@ def view_analytics():
             )
             st.plotly_chart(fig2, use_container_width=True)
 
-    # --- Data Table ---
-    st.subheader("Detailed Transactions")
+
+
+
+def view_transactions():
+    st.title("📋 Transactions")
+
+    # --- Load Data ---
+    raw_data = fetch_transactions(limit=5000, _refresh_key=st.session_state.refresh_key)
+    if not raw_data:
+        st.info("No transactions found.")
+        return
+
+    df = pd.DataFrame(raw_data)
+    df['date'] = pd.to_datetime(df['date'])
+
+    # --- Date Filter ---
+    min_date = df['date'].min().date()
+    max_date = df['date'].max().date()
+    
+    c1, c2 = st.columns([1, 3])
+    with c1:
+        start_date, end_date = st.date_input(
+            "Filter Date Range",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date,
+            key="tx_date_filter"
+        )
+
+    # Apply Filters
+    mask = (
+        (df['date'].dt.date >= start_date) & 
+        (df['date'].dt.date <= end_date)
+    )
+    df_filtered = df.loc[mask]
+
     st.dataframe(
         df_filtered[['date', 'description', 'category', 'subcategory', 'amount', 'currency']]
         .sort_values('date', ascending=False),
@@ -156,20 +164,8 @@ def view_analytics():
         hide_index=True
     )
 
-
-def view_management():
+def view_management(tool):
     st.title("🛠 Management")
-    
-    # Subsection Navigation in Sidebar
-    st.sidebar.markdown("---")
-    st.sidebar.header("Management Tools")
-    
-    tool = st.sidebar.radio("Select Tool:", [
-        "Upload CSV", 
-        "Rules Editor", 
-        "Categories",
-        "Bulk Categorization"
-    ])
     
     if tool == "Upload CSV":
         st.header("Import Transactions")
@@ -447,7 +443,7 @@ def view_management():
                     fetch_categories_tree.clear()
                     st.rerun()
 
-    elif tool == "Bulk Categorization":
+    elif tool == "Manual Categorization":
         st.header("Manual Categorization")
         st.markdown("Assign categories to transactions manually.")
         
@@ -569,21 +565,86 @@ def view_management():
 
 # --- Main Router ---
 def main():
-    # Sidebar Navigation
+    # Deprecated main wrapper, logic moved to __main__ block for sidebar simplicity
+    pass
+
+if __name__ == "__main__":
     st.sidebar.title("Expensior")
-    section = st.sidebar.radio("Section", ["Analytics", "Management"])
     
-    # Check Backend Status
+    # --- Navigation State ---
+    if "current_view" not in st.session_state:
+        st.session_state.current_view = "Dashboard"
+
+    def update_view():
+        # Callback to update view based on widget state
+        # We need to determine which widget triggered the callback?
+        # Actually, we can just sync the state.
+        pass
+
+    # --- Sidebar ---
+    
+    # 1. ANALYTICS
+    st.sidebar.caption("ANALYTICS")
+    
+    analytics_opts = ["Dashboard", "Transactions"]
+    try:
+        idx_analytics = analytics_opts.index(st.session_state.current_view)
+    except ValueError:
+        idx_analytics = None
+    
+    def on_analytics_change():
+        st.session_state.current_view = st.session_state.nav_analytics
+        st.session_state.nav_management = None
+
+    st.sidebar.radio(
+        "Analytics Nav",
+        options=analytics_opts,
+        index=idx_analytics,
+        key="nav_analytics",
+        label_visibility="collapsed",
+        on_change=on_analytics_change
+    )
+
+    st.sidebar.markdown("") # Spacer
+
+    # 2. MANAGEMENT
+    st.sidebar.caption("MANAGEMENT")
+    
+    management_opts = ["Upload CSV", "Categories", "Rules Editor", "Manual Categorization"]
+    
+    # Determine index for Management radio
+    try:
+        idx_mgmt = management_opts.index(st.session_state.current_view)
+    except ValueError:
+        idx_mgmt = None
+
+    def on_mgmt_change():
+        st.session_state.current_view = st.session_state.nav_management
+        st.session_state.nav_analytics = None
+        st.session_state.current_view = st.session_state.nav_management
+
+    st.sidebar.radio(
+        "Management Nav",
+        options=management_opts,
+        index=idx_mgmt,
+        key="nav_management",
+        label_visibility="collapsed",
+        on_change=on_mgmt_change
+    )
+    
+    # Check Backend Status (moved to bottom)
+    st.sidebar.markdown("---")
     try:
         health = requests.get(f"{API_URL.replace('/api', '')}/").json()
-        st.sidebar.success(f"Backend Connected")
+        st.sidebar.caption(f"✅ Backend Connected")
     except:
         st.sidebar.error("Backend Disconnected")
 
-    if section == "Analytics":
+    # --- Routing ---
+    if st.session_state.current_view == "Dashboard":
         view_analytics()
-    elif section == "Management":
-        view_management()
+    elif st.session_state.current_view == "Transactions":
+        view_transactions()
+    else:
+        view_management(st.session_state.current_view)
 
-if __name__ == "__main__":
-    main()

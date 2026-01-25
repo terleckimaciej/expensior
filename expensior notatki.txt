@@ -65,11 +65,29 @@ shopping_and_services
 	online_shopping
 	books
 	services
-	music
-
-
+	musi
 
 MODULY STRONY:
+na gorze przelacznik analysis/management - wraz z przelaczeniem zmienia sie lewy pasek 
 
--miejsce do wrzucenia csv
--tabela transakcji wraz z dopasowaniami, mozliwosc dopisania
+-D a s h b o a r d :
+	-na gorze filtry miesiaca, czasu, jakas prosta forma filtru samego miesiaca/tygodnia
+	-kafelek z info o dochodzie w danym okresie, wydatkach w danym okresie, saldo netto, liczba transakcji
+	sekcja: cashflow w czasie
+	-wykres liniowy: w podziale na miesiace linia lacznych wydatkow, dochodow i oszczednosci
+	-kolowy wykres wydatkow w danym miesiacu (bez oszczednosci) - w podziale na kategorie. 
+	niech puste beda other
+	-kolowy wykres w podziale na podkategorie - niech beda zgrupowane w grupy kolorow z tej samej kategorii
+
+-miejsce do wrzucenia csv. nie musi to byc sekcja, moze byc po prostu przycisk, ktory otwiera
+	okno do dropniecia pliku. moze to byc sekcja import/export, gdzie mozna tez wyeksportowac baze,
+	ustawienia, backup
+-tabela transakcji wraz z dopasowaniami, mozliwosc dopisania transakcji, jak i zmienienia/nadania 
+	przypisania, mozliwosc edycji ilus operacji na raz (zaznaczanie)
+	-niech bedzie tez mozliwosc filtowania po kazdej z kolumn, przedzialu czasu itp
+-panel do dodawania i zarzadzania regulami, przy okazji statystyka ile klasyfikacji obsluzyly reguly
+-panel do zarzadzania slownikiem kategorii, wyswietlenie ich drzewa jako wygodny view 
+
+FEATURE'y:
+-zrzut do csv dowolnej tabeli
+-dla dashboardu - sumowanie kategorii lacznie z wplywami (czynsz)
