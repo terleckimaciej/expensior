@@ -72,54 +72,44 @@ def view_analytics():
     )
     df_filtered = df.loc[mask]
 
-    # --- KPI Metrics ---
-    # Calc totals
-    total_spent = df_filtered[df_filtered['amount'] < 0]['amount'].sum()
-    total_income = df_filtered[df_filtered['amount'] > 0]['amount'].sum()
-    tx_count = len(df_filtered)
+    # --- Metrics Calculation ---
+    
+    # Normalize category names for comparison (just in case)
+    # But based on DB inspection, they are lowercase 'income' and 'savings'
+    
+    # 1. Income
+    income_mask = df_filtered['category'] == 'income'
+    val_income = df_filtered.loc[income_mask, 'amount'].sum()
+    
+    # 2. Savings
+    savings_mask = df_filtered['category'] == 'savings'
+    # Savings are usually negative (outflow), so we invert sign for display "Amount Saved"
+    val_savings = df_filtered.loc[savings_mask, 'amount'].sum() * -1
+    
+    # 3. Expenses (Everything else)
+    # Logic: Sum of ALL transactions that are NOT income and NOT savings.
+    expenses_mask = ~df_filtered['category'].isin(['income', 'savings'])
+    val_expenses_net = df_filtered.loc[expenses_mask, 'amount'].sum()
+    
+    # 4. Balance (Income - Expenses)
+    # Since val_expenses_net is typically negative (e.g. -2000), we add it: 5000 + (-2000) = 3000
+    val_balance = val_income + val_expenses_net
+    
+    # 5. Count
+    val_count = len(df_filtered)
 
-    # Display KPIs
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Spent", f"{total_spent:,.2f} PLN", delta_color="inverse")
-    c2.metric("Total Income", f"{total_income:,.2f} PLN")
-    c3.metric("Transactions", tx_count)
+    # --- Display Metrics ---
+    st.markdown("### Key Metrics")
+    m1, m2, m3, m4, m5 = st.columns(5)
+    
+    m1.metric("Income", f"{val_income:,.2f} PLN")
+    # Display Expenses as positive magnitude for readability, but mathematically we used the negative value for balance
+    m2.metric("Expenses", f"{abs(val_expenses_net):,.2f} PLN", delta_color="inverse") 
+    m3.metric("Balance", f"{val_balance:,.2f} PLN")
+    m4.metric("Savings", f"{val_savings:,.2f} PLN")
+    m5.metric("Transactions", val_count)
 
     st.markdown("---")
-
-    # --- Charts ---
-    c_chart1, c_chart2 = st.columns(2)
-    
-    with c_chart1:
-        st.subheader("Expenses by Category")
-        if not df_filtered.empty:
-            spending = (
-                df_filtered[df_filtered['amount'] < 0]
-                .groupby('category')['amount']
-                .sum()
-                .abs()
-                .reset_index()
-                .sort_values('amount', ascending=False)
-            )
-            fig = px.bar(spending, x='category', y='amount', text_auto='.2s', color='category')
-            st.plotly_chart(fig, use_container_width=True)
-
-    with c_chart2:
-        st.subheader("Income vs Expenses Over Time")
-        if not df_filtered.empty:
-            df_filtered['month'] = df_filtered['date'].dt.to_period("M").astype(str)
-            cash_flow = df_filtered.groupby(['month']).agg(
-                income=('amount', lambda x: x[x > 0].sum()),
-                expense=('amount', lambda x: x[x < 0].sum())
-            ).reset_index()
-            
-            fig2 = px.bar(
-                cash_flow.melt(id_vars='month', value_vars=['income', 'expense']),
-                x='month',
-                y='value',
-                color='variable',
-                barmode='group'
-            )
-            st.plotly_chart(fig2, use_container_width=True)
 
 
 
