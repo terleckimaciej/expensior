@@ -1,6 +1,16 @@
 # Core data processing
 pandas>=2.0.0
 
-# Optional development tools
+#    Backend / API
+fastapi
+uvicorn
+python-multipart
+requests
+
+# Frontend / Dashboard
+streamlit
+plotly
+
+# Optional development tools for etl
 # jupyter>=1.0.0
 # notebook>=7.0.0

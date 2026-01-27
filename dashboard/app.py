@@ -14,6 +14,22 @@ st.set_page_config(page_title="Expensior Dashboard", layout="wide")
 if "refresh_key" not in st.session_state:
     st.session_state.refresh_key = 0
 
+# --- Default Global State (Date Filters) ---
+# We use a persistent key 'global_date_range' to store the value across tab switches.
+# The widget will use 'filter_date_range' as its key, but sync with 'global_date_range'.
+if "global_date_range" not in st.session_state:
+    today = datetime.today()
+    start_of_month = today.replace(day=1).date()
+    
+    # Calculate end of month
+    if today.month == 12:
+        next_month_start = today.replace(year=today.year + 1, month=1, day=1)
+    else:
+        next_month_start = today.replace(month=today.month + 1, day=1)
+    end_of_month = (next_month_start - timedelta(days=1)).date()
+
+    st.session_state.global_date_range = (start_of_month, end_of_month)
+
 def refresh_data():
     st.session_state.refresh_key += 1
 
@@ -54,20 +70,15 @@ def view_analytics():
 
     # --- Date Filter & Control Panel ---
     
-    # Initialize date state if not present (default to max range)
-    if "filter_date_range" not in st.session_state:
-        st.session_state.filter_date_range = (df['date'].min().date(), df['date'].max().date())
+    # (State initialization moved to global scope to prevent reset on tab change)
 
     # --- Period Manipulation Logic ---
     def adjust_period(direction: int):
         # direction: -1 (prev), 1 (next)
         period_type = st.session_state.get("period_selector", "Month")
         
-        # We must use the key of the widget to get the current truth, 
-        # or fall back to our manually tracked state.
-        # Ideally, we bind everything to 'filter_date_range' key.
-        
-        current_val = st.session_state.get("filter_date_range")
+        # Use persisted global_date_range
+        current_val = st.session_state.global_date_range
         if not current_val or not isinstance(current_val, tuple) or len(current_val) != 2:
              current_val = (df['date'].min().date(), df['date'].max().date())
              
@@ -76,24 +87,15 @@ def view_analytics():
         new_start, new_end = current_start, current_end
         
         if period_type == "Month":
-            # Move to start of next/prev month
-            # Calculate logic based on current_start
-            # 1. Go to first day of current month
             base = current_start.replace(day=1) 
-            # 2. Add/Sub month
-            # Simple way: using pandas offsets or pure python
-            # Let's use simple logic: next month is month+1
-            
             year, month = base.year, base.month
             
             if direction == 1:
-                # Next month
                 month += 1
                 if month > 12:
                     month = 1
                     year += 1
             else:
-                # Prev month
                 month -= 1
                 if month < 1:
                     month = 12
@@ -106,7 +108,6 @@ def view_analytics():
             if next_m > 12:
                 next_m = 1
                 next_y += 1
-            # Last day is first day of next month minus 1 day
             new_end = (new_start.replace(year=next_y, month=next_m, day=1) - timedelta(days=1))
 
         elif period_type == "Year":
@@ -114,12 +115,19 @@ def view_analytics():
             new_end = new_start.replace(year=new_start.year, month=12, day=31)
 
         elif period_type == "Week":
-            # Just Shift by 7 days
             shift = timedelta(weeks=direction)
             new_start = current_start + shift
             new_end = current_end + shift
             
-        st.session_state.filter_date_range = (new_start, new_end)
+        st.session_state.global_date_range = (new_start, new_end)
+        # Update the widget key as well to ensure the UI reflects the change immediately
+        if "filter_date_range" in st.session_state:
+            st.session_state.filter_date_range = (new_start, new_end)
+        st.rerun()
+
+    def on_date_change():
+        st.session_state.global_date_range = st.session_state.filter_date_range
+
 
 
     # Layout: [ < ] [ Selector ] [ > ]  __________ [ Date Range Picker ]
@@ -151,20 +159,20 @@ def view_analytics():
 
         with c_picker:
             # Main Date Picker (Source of Truth)
-            # It reads/writes directly to session_state.filter_date_range
-            
-            date_selection = st.date_input(
+            # Syncs with global_date_range
+            st.date_input(
                 "Filter Date Range",
-                value=st.session_state.filter_date_range,
+                value=st.session_state.global_date_range,
                 min_value=None,
                 max_value=None,
-                key="filter_date_range" 
+                key="filter_date_range",
+                on_change=on_date_change
             )
 
     # Extract dates for filtering
     # Handle the case where range isn't fully picked yet
-    if isinstance(st.session_state.filter_date_range, tuple) and len(st.session_state.filter_date_range) == 2:
-        start_date, end_date = st.session_state.filter_date_range
+    if isinstance(st.session_state.global_date_range, tuple) and len(st.session_state.global_date_range) == 2:
+        start_date, end_date = st.session_state.global_date_range
     else:
         # Fallback
         start_date, end_date = df['date'].min().date(), df['date'].max().date() 
