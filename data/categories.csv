@@ -8,8 +8,7 @@ dining out,fast_food
 dining out,fastfood
 dining out,milk bars
 dining out,restaurants
-dining_out,bakery
-dining_out,vending machines
+dining out,vending machines
 entertainment+subscriptions,subscriptions
 groceries,bakery
 groceries,convinience_store
@@ -17,7 +16,6 @@ groceries,discount_store
 health,pharmacy
 health,vision
 housing,rent
-housing,rent_reimbursment
 income,salary
 income,scholarship
 savings,

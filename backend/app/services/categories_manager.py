@@ -25,7 +25,7 @@ def load_categories_from_csv(conn: sqlite3.Connection, csv_path: str, clear_exis
 
             # Pre-load existing parents if not clearing
             if not clear_existing:
-                cursor = conn.execute("SELECT name, id FROM categories WHERE parent_id IS NULL")
+                cursor = conn.execute("SELECT category, category_id FROM categories WHERE parent_id IS NULL")
                 for name, pid in cursor.fetchall():
                     parent_cache[name] = pid
 
@@ -42,12 +42,12 @@ def load_categories_from_csv(conn: sqlite3.Connection, csv_path: str, clear_exis
                 if parent_id is None:
                     # Insert new parent
                     try:
-                        cursor = conn.execute("INSERT INTO categories (name, parent_id) VALUES (?, NULL)", (category,))
+                        cursor = conn.execute("INSERT INTO categories (category, parent_id) VALUES (?, NULL)", (category,))
                         parent_id = cursor.lastrowid
                         parent_cache[category] = parent_id
                     except sqlite3.IntegrityError:
                         # Race condition or already exists (and not in cache?)
-                        cursor = conn.execute("SELECT id FROM categories WHERE name = ? AND parent_id IS NULL", (category,))
+                        cursor = conn.execute("SELECT category_id FROM categories WHERE category = ? AND parent_id IS NULL", (category,))
                         res = cursor.fetchone()
                         if res:
                             parent_id = res[0]
@@ -57,7 +57,7 @@ def load_categories_from_csv(conn: sqlite3.Connection, csv_path: str, clear_exis
                 if subcategory:
                     # Insert child linked to parent
                     try:
-                        conn.execute("INSERT INTO categories (name, parent_id) VALUES (?, ?)", (subcategory, parent_id))
+                        conn.execute("INSERT INTO categories (category, parent_id) VALUES (?, ?)", (subcategory, parent_id))
                     except sqlite3.IntegrityError:
                         # Already exists, skip
                         pass

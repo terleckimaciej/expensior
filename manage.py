@@ -9,6 +9,7 @@ from app.core.database import get_db_connection
 from app.services.importer import import_file
 from app.services.classifier import run_classification
 from app.services.rules_manager import load_rules_from_csv
+from app.services.categories_manager import load_categories_from_csv
 
 def cmd_import(args):
     """Import CSV file."""
@@ -67,11 +68,38 @@ def cmd_load_rules(args):
     finally:
         conn.close()
 
+def cmd_load_categories(args):
+    """Load categories from CSV."""
+    from app.core.config import DATA_DIR
+    default_csv = DATA_DIR / "categories.csv"
+    
+    csv_path = args.csv if args.csv else str(default_csv)
+    
+    print(f"Loading categories from {csv_path}...")
+    conn = get_db_connection()
+    try:
+        conn.execute("BEGIN")
+        # Ensure foreign keys are on? Though load_categories handles one atomic operation usually.
+        load_categories_from_csv(conn, csv_path, clear_existing=args.clear)
+        conn.commit()
+        # print success message inside function or here? function has print, but let's be safe
+    except Exception as e:
+        conn.rollback()
+        print(f"Error loading categories: {e}")
+    finally:
+        conn.close()
+
 def main():
     parser = argparse.ArgumentParser(description="Expensior Management CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Import Command
+    # Load Categories Command
+    categories_parser = subparsers.add_parser("load-categories", help="Load categories from CSV")
+    categories_parser.add_argument("--csv", help="Path to categories CSV")
+    categories_parser.add_argument("--clear", action="store_true", help="Clear existing categories")
+    categories_parser.set_defaults(func=cmd_load_categories)
+
     import_parser = subparsers.add_parser("import", help="Import a bank CSV")
     import_parser.add_argument("input", help="Path to CSV file")
     import_parser.add_argument("--dry-run", action="store_true")

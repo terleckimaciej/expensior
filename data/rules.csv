@@ -38,7 +38,7 @@ id,pattern,match_type,source_column,merchant,category,subcategory,conditions,pri
 37,KFC,contains,description,,dining out,fast_food,,10
 38,HEBE,contains,description,Hebe,shopping_and_services,beauty,,10
 39,LATINO FOOD,contains,description,,dining out,restaurants,,10
-40,TBILISI ERIK ZAK,contains,description,Pierarnia Gruzinska Sluzew,dining out,bakery,,10
+40,TBILISI ERIK ZAK,contains,description,Pierarnia Gruzinska Sluzew,groceries,bakery,,10
 41,VINYL,contains,description,,shopping_and_services,music,,9
 42,KODANO,contains,description,Kodano,health,vision,,10
 43,ALKOHOLE SWIATA,contains,description,Alkochole Swiata,groceries,convinience_store,,10
@@ -69,5 +69,5 @@ id,pattern,match_type,source_column,merchant,category,subcategory,conditions,pri
 68,atm_withdrawal,contains,transaction_type,ATM,ATM_withdrawal,,,9
 69,BATEX,contains,description,Venting Machine,dining_out,vending machines,,10
 70,LEROY MERLIN,contains,description,Leroy Merlin,shopping_and_services,home_goods,,10
-71,(DOMANIEWSKA|CZYNSZ),regex,description,,housing ,rent_reimbursment,"{""min_amount"": 0}",10
+71,(DOMANIEWSKA|CZYNSZ),regex,description,,housing ,rent,"{""min_amount"": 0}",10
 72,auto_savings,contains,description,,savings,auto_savings,,10
