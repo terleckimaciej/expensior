@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from app.core.database import get_db_connection
 from app.core.config import DATA_DIR
 from app.services.importer import import_file
+from app.services.classifier import run_classification
 
 router = APIRouter()
 
@@ -46,9 +47,15 @@ async def upload_csv(
         
         # 2. Call the existing importer service
         # Note: import_file expects a string path
-        result = import_file(str(temp_path), db, on_conflict=on_conflict)
+        import_result = import_file(str(temp_path), db, on_conflict=on_conflict)
         
-        return result
+        # 3. Trigger automatic classification for newly added transactions
+        classification_result = run_classification(db)
+        
+        return {
+            "import": import_result,
+            "classification": classification_result
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

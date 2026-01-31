@@ -506,8 +506,23 @@ def view_management(tool):
                         
                         if response.status_code == 200:
                             res = response.json()
-                            st.success(f"Successfully imported {res.get('row_count')} rows!")
-                            st.json(res)
+                            imp_stats = res.get('import', {})
+                            cls_stats = res.get('classification', {})
+                            
+                            st.success(f"Done! Imported {imp_stats.get('row_count')} rows.")
+                            
+                            col_a, col_b = st.columns(2)
+                            with col_a:
+                                st.metric("Imported Transactions", imp_stats.get('row_count', 0))
+                            with col_b:
+                                st.metric("Auto-Classified", cls_stats.get('classified', 0))
+                            
+                            if cls_stats.get('unclassified', 0) > 0:
+                                st.warning(f"{cls_stats.get('unclassified')} transactions remain unclassified. Check your rules!")
+                            
+                            with st.expander("Show Raw Response"):
+                                st.json(res)
+                                
                             refresh_data()
                         else:
                             st.error(f"Import failed: {response.text}")
