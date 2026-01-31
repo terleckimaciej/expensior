@@ -29,6 +29,27 @@ def find_column_with_prefix(row: pd.Series, prefix: str) -> str:
     return row_str[matches].iloc[0]
 
 
+def find_account_number(row: pd.Series) -> str:
+    """
+    Robustly extract account number regardless of whether it's in the same cell
+    as the prefix or the adjacent one.
+    """
+    prefixes = ["Rachunek nadawcy:", "Rachunek odbiorcy:", "Rachunek nadawcy :", "Rachunek odbiorcy :"]
+    row_list = [str(x).strip() for x in row]
+    
+    for i, val in enumerate(row_list):
+        for p in prefixes:
+            if val.startswith(p):
+                # Option A: "Rachunek nadawcy: 73 1140..."
+                rem = val[len(p):].strip()
+                if rem:
+                    return rem.replace(" ", "")
+                # Option B: "Rachunek nadawcy:" | "73 1140..."
+                if i + 1 < len(row_list):
+                    return row_list[i+1].replace(" ", "")
+    return ""
+
+
 def short_hash(*values, length=4) -> str:
     base = "|".join(str(v) for v in values)
     h = hashlib.sha256(base.encode()).hexdigest()
@@ -174,7 +195,10 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
         .str.upper()
         .apply(lambda x: x if x == "PRZELEW NA TELEFON" else x.replace("PRZELEW NA TELEFON", "").strip())
     )
-    account_numbers = df["Unnamed: 6"].astype(str).str.replace(" ", "", regex=False).str.strip()
+    
+    # Calculate account numbers dynamically (not hardcoded to Unnamed: 6)
+    account_numbers = df.loc[mask].apply(find_account_number, axis=1)
+    
     df_std.loc[mask, "transaction_id"] = df_std.loc[mask].apply(
         lambda row: account_numbers[row.name] + " " + short_hash(row["date"], row["amount"], row["description"], length=4),
         axis=1,
