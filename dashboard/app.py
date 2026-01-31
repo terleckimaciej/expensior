@@ -486,10 +486,32 @@ def view_management(tool):
         if uploaded_file is not None:
             st.write("Preview:")
             try:
-                df_preview = pd.read_csv(uploaded_file)
+                # We read it once for preview using latin2 encoding for PKO BP files
+                df_preview = pd.read_csv(uploaded_file, encoding='latin2')
                 st.dataframe(df_preview.head())
-                if st.button("Simulate Import (Not implemented in UI yet)"):
-                    st.warning("Backend upload endpoint is not yet connected to UI.")
+                
+                # Reset buffer position for the actual upload
+                uploaded_file.seek(0)
+                
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    on_conflict = st.selectbox("On Conflict", ["ignore", "replace", "abort"])
+                
+                if st.button("Process Import"):
+                    with st.spinner("Uploading and processing..."):
+                        files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "text/csv")}
+                        params = {"on_conflict": on_conflict}
+                        
+                        response = requests.post(f"{API_URL}/import/upload", files=files, params=params)
+                        
+                        if response.status_code == 200:
+                            res = response.json()
+                            st.success(f"Successfully imported {res.get('row_count')} rows!")
+                            st.json(res)
+                            refresh_data()
+                        else:
+                            st.error(f"Import failed: {response.text}")
+                            
             except Exception as e:
                 st.error(f"Error reading CSV: {e}")
 
