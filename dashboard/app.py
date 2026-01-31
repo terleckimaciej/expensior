@@ -231,6 +231,170 @@ def view_analytics():
 
     st.markdown("---")
 
+    # --- Charts Section ---
+    c1, c2, c3 = st.columns([1, 1, 1])
+    
+    with c1:
+        st.subheader("Hierarchy")
+        df_spending = df_filtered[expenses_mask].copy()
+        
+        if not df_spending.empty:
+            # Fill missing categories with 'Other'
+            df_spending['category'] = df_spending['category'].fillna('Other').replace('', 'Other')
+            df_spending['subcategory'] = df_spending['subcategory'].fillna('General').replace('', 'General')
+            
+            # Group by category and subcategory for netting
+            cat_sub_totals = df_spending.groupby(['category', 'subcategory'])['amount'].sum().reset_index()
+            # Convert to absolute magnitude for the hierarchy
+            cat_sub_totals['spending'] = cat_sub_totals['amount'].apply(lambda x: abs(x) if x < 0 else 0)
+            cat_sub_totals = cat_sub_totals[cat_sub_totals['spending'] > 0]
+
+            if not cat_sub_totals.empty:
+                # Build the hierarchy for drill-down approach
+                # 1. ROOT node (using a space for label)
+                total_spending = cat_sub_totals['spending'].sum()
+                sun_data = [{"id": "ROOT", "label": " ", "parent": "", "value": total_spending}]
+                
+                # 2. Category nodes
+                cat_totals = cat_sub_totals.groupby('category')['spending'].sum().reset_index()
+                cat_totals = cat_totals.sort_values('spending', ascending=True)
+                
+                for _, row in cat_totals.iterrows():
+                    sun_data.append({
+                        "id": f"CAT_{row['category']}",
+                        "label": row['category'],
+                        "parent": "ROOT",
+                        "value": row['spending']
+                    })
+                
+                # 3. Subcategory nodes
+                for _, row in cat_sub_totals.iterrows():
+                    sun_data.append({
+                        "id": f"SUB_{row['category']}_{row['subcategory']}",
+                        "label": row['subcategory'],
+                        "parent": f"CAT_{row['category']}",
+                        "value": row['spending']
+                    })
+                
+                df_sun = pd.DataFrame(sun_data)
+                
+                # Create custom text labels (hide for ROOT to keep center empty)
+                df_sun['display_text'] = df_sun.apply(
+                    lambda x: f"<b>{x['label']}</b><br>{x['value']:,.0f} PLN" if x['id'] != 'ROOT' else "",
+                    axis=1
+                )
+                
+                # Create Sunburst with Drill-down
+                fig_sunburst = px.sunburst(
+                    df_sun,
+                    ids='id',
+                    names='label',
+                    parents='parent',
+                    values='value',
+                    color='label',
+                    color_discrete_map={' ': '#0e1117'},
+                    branchvalues="total"
+                )
+                
+                fig_sunburst.update_layout(
+                    margin=dict(t=0, b=0, l=0, r=0),
+                    height=350,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)'
+                )
+                
+                fig_sunburst.update_traces(
+                    text=df_sun['display_text'],
+                    textinfo="text",
+                    maxdepth=2,
+                    hovertemplate='<b>%{label}</b><br>Amount: %{value:,.2f} PLN',
+                    insidetextorientation='horizontal'
+                )
+                
+                st.plotly_chart(fig_sunburst, use_container_width=True)
+            else:
+                st.info("No net expenses.")
+        else:
+            st.info("No expense data.")
+
+    with c2:
+        st.subheader("Categories")
+        if not df_spending.empty:
+            # We use the cat_totals calculated in c1 block
+            # If cat_totals is not available (c1 branch failed), we calculate it
+            cat_totals = df_spending.groupby('category')['amount'].sum().reset_index()
+            cat_totals['spending'] = cat_totals['amount'].apply(lambda x: abs(x) if x < 0 else 0)
+            cat_totals = cat_totals[cat_totals['spending'] > 0].sort_values('spending', ascending=True)
+
+            if not cat_totals.empty:
+                fig_bar = px.bar(
+                    cat_totals,
+                    x='spending',
+                    y='category',
+                    orientation='h',
+                    # text='spending', # Removed from bars to save space
+                    color='category',
+                    color_discrete_sequence=px.colors.qualitative.Safe,
+                )
+                
+                fig_bar.update_traces(
+                    # texttemplate='%{text:,.2f} PLN', 
+                    # textposition='outside',
+                    hovertemplate='Category: %{y}<br>Amount: %{x:,.2f} PLN'
+                )
+                
+                fig_bar.update_layout(
+                    margin=dict(t=10, b=10, l=0, r=0),
+                    height=350,
+                    xaxis_title="",
+                    yaxis_title="",
+                    showlegend=False,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)'
+                )
+                
+                st.plotly_chart(fig_bar, use_container_width=True)
+            else:
+                st.info("No spending.")
+        else:
+            st.info("No expense data.")
+
+    with c3:
+        st.subheader("Cashflow Split")
+        # Pie chart of Income vs Expenses vs Savings
+        pie_data = pd.DataFrame({
+            "Type": ["Income", "Expenses", "Savings"],
+            "Amount": [val_income, abs(val_expenses_net), val_savings]
+        })
+        # Filter out 0 amounts
+        pie_data = pie_data[pie_data['Amount'] > 0]
+        
+        if not pie_data.empty:
+            fig_pie = px.pie(
+                pie_data, 
+                values='Amount', 
+                names='Type',
+                hole=0.4,
+                color='Type',
+                color_discrete_map={
+                    "Income": "#2ecc71",
+                    "Expenses": "#e74c3c",
+                    "Savings": "#3498db"
+                }
+            )
+            fig_pie.update_layout(
+                margin=dict(t=10, b=10, l=0, r=0),
+                height=350,
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
+            )
+            fig_pie.update_traces(textinfo='percent')
+            st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.info("No data.")
+
 
 
 def view_transactions_manager(mode: str = "all"):
